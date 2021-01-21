@@ -1,5 +1,6 @@
 import discord
 import sys
+
 # Setup logging so discord.py can log
 import logging
 discordLogger = logging.getLogger("discord")
@@ -22,7 +23,7 @@ prefix = "t:"
 
 client = discord.Client()
 
-async def cmd_ping(message, args):
+async def cmd_ping(message):
     await message.channel.send("pong")
 
 @client.event
@@ -50,7 +51,7 @@ async def on_message(message):
         cmd, args = message.content.strip().split(" ", 1)
         args = args.split(" ")
 
-    else:
+    else:  # if command has no arguments, set args to an empty list
         cmd = message.content.strip()
         args = []
 
@@ -60,8 +61,17 @@ async def on_message(message):
     if f"cmd_{cmd}" not in globals():
         return
 
+    # If the number of arguments is incorrect, send an error message and stop processing
+    cmdFunc = globals()[f"cmd_{cmd}"]
+    cmdArgCount = cmdFunc.__code__.co_argcount-1
+    if cmdArgCount != len(args):
+        em = discord.Embed(title="Incorrect number of arguments", description=f"Expected {cmdArgCount}, you gave {len(args)}", colour=16711680)
+        await message.channel.send(embed=em)
+        return
+
+    args.insert(0, message)
     # Call the command function
-    await globals()[f"cmd_{cmd}"](message, args)
+    await cmdFunc(*args)
 
     logger.info(f"{message.author.name}({message.author.id}) -> {message.channel.name}({message.channel.id}): {message.content.strip()}")
 
