@@ -1,14 +1,14 @@
 import discord
 import sys
-import os
-import aiofiles
-import json
+
+import util
+import cmds
 
 # Setup logging so discord.py can log
 import logging
 discordLogger = logging.getLogger("discord")
 discordLogger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename="logs/discord.log", encoding="utf-8", mode="w")
+handler = logging.FileHandler(filename="../logs/discord.log", encoding="utf-8", mode="w")
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 discordLogger.addHandler(handler)
 
@@ -18,29 +18,13 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 # Read token from file
-file = open("token.dat")
+file = open("../token.dat")
 token = file.read().strip()
 file.close()
 
 prefix = "t:"
 
 client = discord.Client()
-
-async def registerUser(userID):
-    existingUsers = os.listdir("data/users")
-    if str(userID) in existingUsers:
-        logger.debug("Exists")
-        return
-
-    bareData = {"tOwned": [], "tJoined": [], "tWins": 0, "mWins": 0}
-
-    bareData = json.dumps(bareData)
-    f = await aiofiles.open(f"data/users/{userID}.dat", "w+")
-    await f.write(bareData)
-    await f.close()
-
-async def cmd_ping(message):
-    await message.channel.send("pong")
 
 @client.event
 async def on_ready():
@@ -74,20 +58,22 @@ async def on_message(message):
     cmd = cmd.replace(prefix, "")
 
     # If there's no corresponding command function, stop processing
-    if f"cmd_{cmd}" not in globals():
+    if f"cmd_{cmd}" not in vars(cmds):
         return
 
     # If the number of arguments is incorrect, send an error message and stop processing
-    cmdFunc = globals()[f"cmd_{cmd}"]
-    cmdArgCount = cmdFunc.__code__.co_argcount-1
+    cmdFunc = vars(cmds)[f"cmd_{cmd}"]
+    cmdArgCount = cmdFunc.__code__.co_argcount-2
     if cmdArgCount != len(args):
         em = discord.Embed(title="Incorrect number of arguments", description=f"Expected {cmdArgCount}, you gave {len(args)}", colour=16711680)
         await message.channel.send(embed=em)
         return
 
-    await registerUser(message.author.id)
+    # Register user if they're not already registered
+    await util.registerUser(message.author.id)
 
     args.insert(0, message)
+    args.insert(0, client)
     # Call the command function
     await cmdFunc(*args)
 
