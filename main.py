@@ -1,5 +1,8 @@
 import discord
 import sys
+import os
+import aiofiles
+import json
 
 # Setup logging so discord.py can log
 import logging
@@ -15,13 +18,26 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 # Read token from file
-f = open("token.dat")
-token = f.read().strip()
-f.close()
+file = open("token.dat")
+token = file.read().strip()
+file.close()
 
 prefix = "t:"
 
 client = discord.Client()
+
+async def registerUser(userID):
+    existingUsers = os.listdir("data/users")
+    if str(userID) in existingUsers:
+        logger.debug("Exists")
+        return
+
+    bareData = {"tOwned": [], "tJoined": [], "tWins": 0, "mWins": 0}
+
+    bareData = json.dumps(bareData)
+    f = await aiofiles.open(f"data/users/{userID}.dat", "w+")
+    await f.write(bareData)
+    await f.close()
 
 async def cmd_ping(message):
     await message.channel.send("pong")
@@ -68,6 +84,8 @@ async def on_message(message):
         em = discord.Embed(title="Incorrect number of arguments", description=f"Expected {cmdArgCount}, you gave {len(args)}", colour=16711680)
         await message.channel.send(embed=em)
         return
+
+    await registerUser(message.author.id)
 
     args.insert(0, message)
     # Call the command function
