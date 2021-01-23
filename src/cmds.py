@@ -1,6 +1,7 @@
 import discord
 import logging
-import datetime
+from datetime import datetime, timezone
+import pytz
 import json
 import aiofiles
 import os
@@ -9,29 +10,49 @@ import util
 # Add the command logger
 logger = logging.getLogger("cmdLogger")
 
+# Generate a dictionary of timezone abbreviations to full timezone names. E.g. "PST": "US/Pacific".
+# This is because pytz.timezone() only takes full timezone names but we want users to be able to input tz names such as PST
+timezoneLookup = dict([(pytz.timezone(x).localize(datetime.now()).tzname(), x) for x in pytz.all_timezones])
+
 async def cmd_ping(client, message):
     await message.channel.send("pong")
 
-async def cmd_create(client, message, name, date, time, timezone):
-    dTime = date + time + timezone
-    try:
-        dTimeObj = datetime.datetime.strptime(dTime, "%Y/%m/%d%H:%M%Z")
+async def cmd_create(client, message, name, date, time, tz, limit):
+    global timezoneLookup
 
-    except ValueError:
-        em = discord.Embed(title="Error", description="Invalid date/time/timezone. Please make sure it's in this format: YYYY/MM/DD HH:MM TZ", colour=16711680)
+    dTime = date + time
+    try:
+        # Generate a timezone agnostic datetime object from the user's input
+        dTimeObj = datetime.strptime(dTime, "%Y/%m/%d%H:%M")
+        # Get a timezone object from the shortcode provided by the user
+        oldTZ = pytz.timezone(timezoneLookup[tz])
+        # Add a datetime to the timezone object
+        oldTZ = oldTZ.localize(dTimeObj)
+        # Convert the timezone/datetime object to a datetime object in UTC
+        dTimeObj = oldTZ.astimezone(timezone.utc)
+
+    except ValueError as e:
+        logger.debug("Invalid datetime")
+        em = discord.Embed(title="Error", description="Invalid date/time. Please make sure it's in this format: YYYY/MM/DD HH:MM TZ", colour=16711680)
         await message.channel.send(embed=em)
         return
 
-    dTime = datetime.datetime.strftime(dTimeObj, "%Y/%m/%d %H:%M")
+    except KeyError as e:
+        logger.debug("Invalid timezone")
+        em = discord.Embed(title="Error", description="Invalid timezone.", colour=16711680)
+        await message.channel.send(embed=em)
+        return
+
+    dTime = datetime.strftime(dTimeObj, "%Y/%m/%d %H:%M")
 
     os.makedirs(f"../data/servers/{message.guild.id}/", exist_ok=True)
     
-    tourney = {"name": name, "dTime": dTime, "players": []}
+    tourney = {"name": name, "dTime": dTime, "players": [], "limit": limit}
 
     em = discord.Embed(title="Tournament Created", colour=65280)
     em.add_field(name="Name", value=name, inline=False)
     em.add_field(name="Date", value=dTime.split(" ")[0], inline=False)
-    em.add_field(name="Time", value=dTime.split(" ")[1], inline=False)
+    em.add_field(name="Time", value=f"{dTime.split(' ')[1]} UTC", inline=False)
 
     await message.channel.send(embed=em)
 
