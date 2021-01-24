@@ -9,9 +9,9 @@ logger = logging.getLogger("cmdLogger")
 
 prefix = "t:"
 
-# Check if any tournaments in upcoming.dat are no longer upcoming
+# Check if any tournaments in upcoming.json are no longer upcoming
 async def cleanUpcoming(guildID):
-    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.dat")
+    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.json")
     upcoming = await f.read()
     await f.close()
 
@@ -24,9 +24,10 @@ async def cleanUpcoming(guildID):
 
     upcoming = json.dumps(upcomingDup)
 
-    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.dat", "w+")
+    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.json", "w+")
     await f.write(upcoming)
     await f.close()
+
 
 # If user isn't registered, create a template user file
 async def registerUser(userID):
@@ -37,6 +38,6 @@ async def registerUser(userID):
     bareData = {"tOwned": [], "tJoined": [], "tWins": 0, "mWins": 0}
 
     bareData = json.dumps(bareData)
-    f = await aiofiles.open(f"../data/users/{userID}.dat", "w+")
+    f = await aiofiles.open(f"../data/users/{userID}.json", "w+")
     await f.write(bareData)
     await f.close()

@@ -6,6 +6,9 @@ import json
 import aiofiles
 import os
 import util
+import random
+import termtables
+import math
 
 # Add the command logger
 logger = logging.getLogger("cmdLogger")
@@ -14,8 +17,38 @@ logger = logging.getLogger("cmdLogger")
 # This is because pytz.timezone() only takes full timezone names but we want users to be able to input tz names such as PST
 timezoneLookup = dict([(pytz.timezone(x).localize(datetime.now()).tzname(), x) for x in pytz.all_timezones])
 
+
 async def cmd_ping(client, message):
     await message.channel.send("pong")
+
+
+async def cmd_upcoming(client, message):
+    await util.cleanUpcoming(message.guild.id)
+
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json")
+    upcoming = await f.read()
+    await f.close()
+    upcoming = json.loads(upcoming)
+
+    # Load upcoming tournaments into list of lists for termtables to use
+    tableList = []
+    for key in upcoming:
+        f = await aiofiles.open(f"../data/servers/{message.guild.id}/{key}.json")
+        tournament = await f.read()
+        await f.close()
+        tournament = json.loads(tournament)
+
+        tournamentList = [key, tournament["name"], f"{tournament['dTime']} UTC", f"{len(tournament['players'])}/{tournament['limit']}"]
+        tableList.append(tournamentList)
+
+    # Generate an ASCII table using termtables
+    desc = termtables.to_string(header=["ID", "Name", "Date/Time", "Players"],
+                                style=termtables.styles.markdown,
+                                data=tableList)
+
+    em = discord.Embed(title="Tournaments", description=f"```{desc}```", colour=random.randint(0, 16777215))
+    await message.channel.send(embed=em)
+
 
 async def cmd_create(client, message, name, date, time, tz, limit):
     global timezoneLookup
@@ -33,7 +66,9 @@ async def cmd_create(client, message, name, date, time, tz, limit):
 
     except ValueError as e:
         logger.debug("Invalid datetime")
-        em = discord.Embed(title="Error", description="Invalid date/time. Please make sure it's in this format: YYYY/MM/DD HH:MM TZ", colour=16711680)
+        em = discord.Embed(title="Error",
+                           description="Invalid date/time. Please make sure it's in this format: YYYY/MM/DD HH:MM TZ",
+                           colour=16711680)
         await message.channel.send(embed=em)
         return
 
@@ -46,7 +81,7 @@ async def cmd_create(client, message, name, date, time, tz, limit):
     dTime = datetime.strftime(dTimeObj, "%Y/%m/%d %H:%M")
 
     os.makedirs(f"../data/servers/{message.guild.id}/", exist_ok=True)
-    
+
     tourney = {"name": name, "dTime": dTime, "players": [], "limit": limit}
 
     em = discord.Embed(title="Tournament Created", colour=65280)
@@ -61,26 +96,26 @@ async def cmd_create(client, message, name, date, time, tz, limit):
     tourneyID = len(os.listdir(f"../data/servers/{message.guild.id}/"))
 
     upcoming = {tourneyID: dTime}
-    if "upcoming.dat" not in os.listdir(f"../data/servers/{message.guild.id}/"):
+    if "upcoming.json" not in os.listdir(f"../data/servers/{message.guild.id}/"):
         upcoming = json.dumps(upcoming)
-        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.dat", "w+")
+        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json", "w+")
         await f.write(upcoming)
         await f.close()
 
     else:
-        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.dat")
+        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json")
         oldData = await f.read()
         await f.close()
 
         upcoming = {**upcoming, **json.loads(oldData)}
         upcoming = json.dumps(upcoming)
 
-        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.dat", "w+")
+        f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json", "w+")
         await f.write(upcoming)
         await f.close()
 
         await util.cleanUpcoming(message.guild.id)
 
-    f = await aiofiles.open(f"../data/servers/{message.guild.id}/{tourneyID}.dat", "w+")
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/{tourneyID}.json", "w+")
     await f.write(tourney)
     await f.close()

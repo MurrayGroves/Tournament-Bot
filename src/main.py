@@ -26,6 +26,7 @@ prefix = "t:"
 
 client = discord.Client()
 
+
 @client.event
 async def on_ready():
     # Delete token out of memory, since the bot is already logged in. Just in case.
@@ -33,6 +34,7 @@ async def on_ready():
     del token
 
     logger.info(f"Logged in as {client.user.name}")
+
 
 @client.event
 async def on_message(message):
@@ -78,6 +80,7 @@ async def on_message(message):
     await cmdFunc(*args)
 
     logger.info(f"{message.author.name}({message.author.id}) -> {message.channel.name}({message.channel.id}): {message.content.strip()}")
+
 
 # Run bot
 client.run(token)
