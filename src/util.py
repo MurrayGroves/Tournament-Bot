@@ -41,3 +41,12 @@ async def registerUser(userID):
     f = await aiofiles.open(f"../data/users/{userID}.json", "w+")
     await f.write(bareData)
     await f.close()
+
+# Turn integer into string of emojis representing that integer
+async def intToEmoji(myInt):
+    emoji = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+    myInt = str(myInt)
+    emojiInt = ""
+    for char in myInt:
+        emojiInt = emojiInt + emoji[int(char)]
+    return emojiInt
