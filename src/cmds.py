@@ -6,9 +6,6 @@ import json
 import aiofiles
 import os
 import util
-import random
-import termtables
-import math
 
 # Add the command logger
 logger = logging.getLogger("cmdLogger")
@@ -25,46 +22,13 @@ async def cmd_ping(client, message):
 async def cmd_upcoming(client, message):
     await util.cleanUpcoming(message.guild.id)
 
-    f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json")
-    upcoming = await f.read()
-    await f.close()
-    upcoming = json.loads(upcoming)
+    em = await util.genUpcomingPage(1, message.guild.id)
+    em = em[0]
 
-    # Load upcoming tournaments into list of lists for termtables to use
-    tableList = []
-    i = 0
-    footer = "1/1"
-    for key in upcoming:
-        i += 1
-        if i > 5:
-            footer = f"1/{math.ceil(len(upcoming)/5)}"
-            break
-
-        f = await aiofiles.open(f"../data/servers/{message.guild.id}/{key}.json")
-        tournament = await f.read()
-        await f.close()
-        tournament = json.loads(tournament)
-
-        tournamentList = [await util.intToEmoji(i), tournament["name"], f"{tournament['dTime']} UTC", f"{len(tournament['players'])}/{tournament['limit']}"]
-        tableList.append(tournamentList)
-
-    # Generate an ASCII table using termtables
-    desc = termtables.to_string(header=["ID", "Name", "Date/Time", "Players"],
-                                style=termtables.styles.markdown,
-                                data=tableList)
-
-    desc = desc.splitlines()
-    desc[0] = desc[0].replace("|", " ")
-    desc[1] = desc[1].replace("|", "-")
-
-    desc = "\n".join(desc)
-
-    em = discord.Embed(title="Upcoming Tournaments", description=f"```{desc}```", colour=random.randint(0, 16777215))
-    em.set_footer(text=footer)
     msg = await message.reply(embed=em, mention_author=False)
     await msg.add_reaction("⬅️")
     await msg.add_reaction("➡️")
-    for x in range(1, i):
+    for x in range(1, 6):
         await msg.add_reaction(await util.intToEmoji(x))
 
 

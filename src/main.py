@@ -1,10 +1,7 @@
 import discord
 import sys
-import aiofiles
-import json
-import math
-import termtables
-import random
+import asyncio
+
 
 import util
 import cmds
@@ -85,68 +82,66 @@ async def on_message(message):
 
     logger.info(f"{message.author.name}({message.author.id}) -> {message.channel.name}({message.channel.id}): {message.content.strip()}")
 
+
 @client.event
 async def on_reaction_add(reaction, user):
     userID = reaction.message.reference.resolved.author.id
     if user.id != userID:
         return
 
-    await util.cleanUpcoming(reaction.message.guild.id)
+    footerText = reaction.message.embeds[0].footer.text.split("/", 1)
+    if " " in footerText[1]:
+        footerText[1], _ = footerText[1].split(" ", 1)
 
-    page = int(reaction.message.embeds[0].footer.text.split("/")[0])
-    maxPage = int(reaction.message.embeds[0].footer.text.split("/")[1])
-    if reaction.emoji == "➡️" and page < maxPage:
-        page += 1
+    page = int(footerText[0])
+    maxPage = int(footerText[1])
+    if reaction.message.embeds[0].title == "Upcoming Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
+        await util.cleanUpcoming(reaction.message.guild.id)
 
-    elif reaction.emoji == "⬅️" and page > 1:
-        page -= 1
+        if reaction.emoji == "➡️" and page < maxPage:
+            page += 1
 
-    else:
-        return
+        elif reaction.emoji == "⬅️" and page > 1:
+            page -= 1
 
-    f = await aiofiles.open(f"../data/servers/{reaction.message.guild.id}/upcoming.json")
-    upcoming = await f.read()
-    await f.close()
-    upcoming = json.loads(upcoming)
+        else:
+            return
 
-    # Load upcoming tournaments into list of lists for termtables to use
-    tableList = []
-    i = 0
-    for key in upcoming:
-        i += 1
+        em = await util.genUpcomingPage(page, reaction.message.guild.id)
+        em = em[0]
 
-        if i < ((page-1)*5)+1:
-            continue
+        await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
-        if i > page*5:
-            break
+    elif reaction.message.embeds[0].title == "Upcoming Tournaments" and reaction.emoji in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]:
+        selection = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"].index(reaction.emoji)
+        tournament = await util.genUpcomingPage(page, reaction.message.guild.id)
+        tournamentID = tournament[1][selection]
+        result = await util.joinTournament(user.id, tournamentID, reaction.message.guild.id)
 
-        f = await aiofiles.open(f"../data/servers/{reaction.message.guild.id}/{key}.json")
-        tournament = await f.read()
-        await f.close()
-        tournament = json.loads(tournament)
+        em = await util.genUpcomingPage(page, reaction.message.guild.id)
+        em = em[0]
 
-        tournamentList = [await util.intToEmoji(i), tournament["name"], f"{tournament['dTime']} UTC",
-                          f"{len(tournament['players'])}/{tournament['limit']}"]
-        tableList.append(tournamentList)
+        if result[0] == 0:
+            em.colour = 16711680
+            em.set_footer(text=f"{page}/{maxPage} This tournament is full!")
 
-    footer = f"{page}/{math.ceil(len(upcoming) / 5)}"
-    # Generate an ASCII table using termtables
-    desc = termtables.to_string(header=["ID", "Name", "Date/Time", "Players"],
-                                style=termtables.styles.markdown,
-                                data=tableList)
+        elif result[0] == 1:
+            em.colour = 65280
+            em.set_footer(text=f"{page}/{maxPage} Joined: {result[1]}")
 
-    desc = desc.splitlines()
-    desc[0] = desc[0].replace("|", " ")
-    desc[1] = desc[1].replace("|", "-")
+        elif result[0] == 2:
+            em.colour = 16776960
+            em.set_footer(text=f"{page}/{maxPage} Left: {result[1]}")
 
-    desc = "\n".join(desc)
+        await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
-    em = discord.Embed(title="Upcoming Tournaments", description=f"```{desc}```", colour=random.randint(0, 16777215))
-    em.set_footer(text=footer)
-
-    await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
     await reaction.remove(user)
+
+    await asyncio.sleep(2)
+
+    em.colour = 255
+    em.set_footer(text=f"{page}/{maxPage}")
+    await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
 
 # Run bot
