@@ -79,11 +79,72 @@ async def genUpcomingPage(page, guildID):
     em.set_footer(text=footer)
     return (em, tournamentIDs)
 
+async def genOwnedPage(page, guildID, userID, **kwargs):
+    f = await aiofiles.open(f"../data/users/{userID}.json")
+    userData = await f.read()
+    await f.close()
+
+    userData = json.loads(userData)
+
+    tOwned = userData["tOwned"]
+
+    owned = []
+    for tourney in tOwned:
+        if tourney.split("/")[0] == str(guildID):
+            owned.append(tourney.split("/")[1])
+
+    # Load upcoming tournaments into list of lists for termtables to use
+    tableList = []
+    i = 0
+    tournamentIDs = []
+    for tID in owned:
+        i += 1
+
+        if i < ((page - 1) * 5) + 1:
+            continue
+
+        if i > page * 5:
+            break
+
+        f = await aiofiles.open(f"../data/servers/{guildID}/{tID}.json")
+        tournament = await f.read()
+        await f.close()
+        tournament = json.loads(tournament)
+
+        try:
+
+            if i % 5 == kwargs["selection"]:
+                tournament["name"] = "*" + tournament["name"]
+
+        except:
+            pass
+
+        tournamentList = [await intToEmoji(i), tournament["name"], f"{tournament['dTime']} UTC",
+                          f"{len(tournament['players'])}/{tournament['limit']}"]
+        tableList.append(tournamentList)
+
+        tournamentIDs.append(tID)
+
+    footer = f"{page}/{math.ceil(len(owned) / 5)}"
+    # Generate an ASCII table using termtables
+    desc = termtables.to_string(header=["ID", "Name", "Date/Time", "Players"],
+                                style=termtables.styles.markdown,
+                                data=tableList)
+
+    desc = desc.splitlines()
+    desc[0] = desc[0].replace("|", " ")
+    desc[1] = desc[1].replace("|", "-")
+
+    desc = "\n".join(desc)
+
+    em = discord.Embed(title="Owned Tournaments", description=f"```{desc}```", colour=255)
+    em.set_footer(text=footer)
+    return (em, tournamentIDs)
 
 # If user isn't registered, create a template user file
 async def registerUser(userID):
     existingUsers = os.listdir("../data/users")
-    if str(userID) in existingUsers:
+    if f"{str(userID)}.json" in existingUsers:
         return
 
     bareData = {"tOwned": [], "tJoined": [], "tWins": 0, "mWins": 0}

@@ -19,21 +19,28 @@ async def cmd_ping(client, message):
     await message.channel.send("pong")
 
 
-async def cmd_upcoming(client, message):
-    await util.cleanUpcoming(message.guild.id)
-
-    em = await util.genUpcomingPage(1, message.guild.id)
-    em = em[0]
-
-    msg = await message.reply(embed=em, mention_author=False)
-    await msg.add_reaction("⬅️")
-    await msg.add_reaction("➡️")
-    for x in range(1, 6):
-        await msg.add_reaction(await util.intToEmoji(x))
-
-
 async def cmd_create(client, message, name, date, time, tz, limit):
     global timezoneLookup
+
+    # If user already owns 3 tournaments in this server, stop them making another.
+    f = await aiofiles.open(f"../data/users/{message.author.id}.json")
+    old = await f.read()
+    await f.close()
+    userOld = json.loads(old)
+    tOwned = {}
+    for tourney in userOld["tOwned"]:
+        guildID = tourney.split("/")[0]
+        if guildID in tOwned:
+            tOwned[guildID] += 1
+
+        else:
+            tOwned[guildID] = 1
+
+    for tourney in tOwned:
+        if tOwned[tourney] >= 3:
+            em = discord.Embed(title="Cannot create tournament, you can only have 3 active tournaments.", colour=16711680)
+            await message.channel.send(embed=em)
+            return
 
     dTime = date + time
     try:
@@ -101,3 +108,31 @@ async def cmd_create(client, message, name, date, time, tz, limit):
     f = await aiofiles.open(f"../data/servers/{message.guild.id}/{tourneyID}.json", "w+")
     await f.write(tourney)
     await f.close()
+
+    userOld["tOwned"].append(f"{message.guild.id}/{tourneyID}")
+
+    f = await aiofiles.open(f"../data/users/{message.author.id}.json", "w+")
+    await f.write(json.dumps(userOld))
+    await f.close()
+
+
+async def cmd_owned(client, message):
+    em = await util.genOwnedPage(1, message.guild.id, message.author.id)
+    em = em[0]
+    msg = await message.reply(embed=em, mention_author=False)
+    await msg.add_reaction("⬅️")
+    await msg.add_reaction("➡️")
+    for x in range(1, 4):
+        await msg.add_reaction(await util.intToEmoji(x))
+
+async def cmd_upcoming(client, message):
+    await util.cleanUpcoming(message.guild.id)
+
+    em = await util.genUpcomingPage(1, message.guild.id)
+    em = em[0]
+
+    msg = await message.reply(embed=em, mention_author=False)
+    await msg.add_reaction("⬅️")
+    await msg.add_reaction("➡️")
+    for x in range(1, 6):
+        await msg.add_reaction(await util.intToEmoji(x))

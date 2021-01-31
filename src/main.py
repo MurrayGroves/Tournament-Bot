@@ -89,12 +89,14 @@ async def on_reaction_add(reaction, user):
     if user.id != userID:
         return
 
-    footerText = reaction.message.embeds[0].footer.text.split("/", 1)
-    if " " in footerText[1]:
-        footerText[1], _ = footerText[1].split(" ", 1)
+    if "/" in reaction.message.embeds[0].footer.text:
+        footerText = reaction.message.embeds[0].footer.text.split("/", 1)
+        if " " in footerText[1]:
+            footerText[1], _ = footerText[1].split(" ", 1)
 
-    page = int(footerText[0])
-    maxPage = int(footerText[1])
+        page = int(footerText[0])
+        maxPage = int(footerText[1])
+
     if reaction.message.embeds[0].title == "Upcoming Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
         await util.cleanUpcoming(reaction.message.guild.id)
 
@@ -110,7 +112,20 @@ async def on_reaction_add(reaction, user):
         em = await util.genUpcomingPage(page, reaction.message.guild.id)
         em = em[0]
 
-        await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
+        await util.cleanUpcoming(reaction.message.guild.id)
+
+        if reaction.emoji == "➡️" and page < maxPage:
+            page += 1
+
+        elif reaction.emoji == "⬅️" and page > 1:
+            page -= 1
+
+        else:
+            return
+
+        em = await util.genOwnedPage(page, reaction.message.guild.id, reaction.author.id)
+        em = em[0]
 
     elif reaction.message.embeds[0].title == "Upcoming Tournaments" and reaction.emoji in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]:
         selection = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"].index(reaction.emoji)
@@ -135,9 +150,35 @@ async def on_reaction_add(reaction, user):
 
         await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
-    await reaction.remove(user)
+        await asyncio.sleep(2)
 
-    await asyncio.sleep(2)
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["1️⃣", "2️⃣", "3️⃣", "4️⃣","5️⃣"]:
+        await reaction.message.clear_reactions()
+        await reaction.message.add_reaction("↩️")
+        await reaction.message.add_reaction("❌")
+        await reaction.message.add_reaction("✏️")
+
+        selection = ["1️⃣", "2️⃣", "3️⃣"].index(reaction.emoji)
+        tournament = await util.genOwnedPage(page, reaction.message.guild.id, user.id, selection=selection+1)
+        tournamentID = tournament[1][selection]
+
+        em = tournament[0]
+
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji == "↩️":
+        await reaction.message.clear_reactions()
+        await reaction.message.add_reaction("⬅️")
+        await reaction.message.add_reaction("➡️")
+        for x in range(1, 6):
+            await reaction.message.add_reaction(await util.intToEmoji(x))
+
+        tournament = await util.genOwnedPage(page, reaction.message.guild.id, user.id)
+        em = tournament[0]
+
+    # Emoji was not part of a command, so return
+    else:
+        return
+
+    await reaction.remove(user)
 
     em.colour = 255
     em.set_footer(text=f"{page}/{maxPage}")
