@@ -1,7 +1,8 @@
 import discord
 import sys
 import asyncio
-
+import aiofiles
+import json
 
 import util
 import cmds
@@ -27,6 +28,8 @@ file.close()
 prefix = "t:"
 
 client = discord.Client()
+
+messageToTournamentIDMappings = {}
 
 @client.event
 async def on_ready():
@@ -89,13 +92,17 @@ async def on_reaction_add(reaction, user):
     if user.id != userID:
         return
 
-    if "/" in reaction.message.embeds[0].footer.text:
-        footerText = reaction.message.embeds[0].footer.text.split("/", 1)
-        if " " in footerText[1]:
-            footerText[1], _ = footerText[1].split(" ", 1)
+    try:
+        if "/" in reaction.message.embeds[0].footer.text:
+            footerText = reaction.message.embeds[0].footer.text.split("/", 1)
+            if " " in footerText[1]:
+                footerText[1], _ = footerText[1].split(" ", 1)
 
-        page = int(footerText[0])
-        maxPage = int(footerText[1])
+            page = int(footerText[0])
+            maxPage = int(footerText[1])
+
+    except TypeError:
+        pass
 
     if reaction.message.embeds[0].title == "Upcoming Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
         await util.cleanUpcoming(reaction.message.guild.id)
@@ -111,6 +118,7 @@ async def on_reaction_add(reaction, user):
 
         em = await util.genUpcomingPage(page, reaction.message.guild.id)
         em = em[0]
+        em.set_footer(text=f"{page}/{maxPage}")
 
     elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
         await util.cleanUpcoming(reaction.message.guild.id)
@@ -148,31 +156,63 @@ async def on_reaction_add(reaction, user):
             em.colour = 16776960
             em.set_footer(text=f"{page}/{maxPage} Left: {result[1]}")
 
+        em.set_footer(text=f"{page}/{maxPage}")
         await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
         await asyncio.sleep(2)
 
-    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["1️⃣", "2️⃣", "3️⃣", "4️⃣","5️⃣"]:
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["1️⃣", "2️⃣", "3️⃣"]:
         await reaction.message.clear_reactions()
         await reaction.message.add_reaction("↩️")
         await reaction.message.add_reaction("❌")
         await reaction.message.add_reaction("✏️")
 
         selection = ["1️⃣", "2️⃣", "3️⃣"].index(reaction.emoji)
-        tournament = await util.genOwnedPage(page, reaction.message.guild.id, user.id, selection=selection+1)
+        tournament = await util.genOwnedPage(reaction.message.guild.id, user.id, selection=selection+1)
         tournamentID = tournament[1][selection]
-
         em = tournament[0]
+        em.set_footer(text=f"{selection+1}/3")
 
     elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji == "↩️":
         await reaction.message.clear_reactions()
         await reaction.message.add_reaction("⬅️")
         await reaction.message.add_reaction("➡️")
-        for x in range(1, 6):
+        for x in range(1, 4):
             await reaction.message.add_reaction(await util.intToEmoji(x))
 
-        tournament = await util.genOwnedPage(page, reaction.message.guild.id, user.id)
+        tournament = await util.genOwnedPage(reaction.message.guild.id, user.id)
         em = tournament[0]
+
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji == "❌":
+        desc = reaction.message.embeds[0].description.splitlines()
+        selected = [s for s in desc if "*" in s]
+        selection = desc.index(selected[0]) - 2
+        tournaments = await util.genOwnedPage(reaction.message.guild.id, user.id)
+        tournamentID = tournaments[1][selection]
+        f = await aiofiles.open(f"../data/servers/{reaction.message.guild.id}/{tournamentID}.json")
+        tournament = await f.read()
+        await f.close()
+        tournament = json.loads(tournament)
+        em = discord.Embed(title="Delete Tournament", description="Are you sure you want to delete this tournament? This is irreversible.")
+        em.add_field(name="Name", value=tournament["name"])
+        em.add_field(name="Date/Time", value=f"{tournament['dTime']} UTC")
+        em.add_field(name="Players", value=f"{len(tournament['players'])}/{tournament['limit']}")
+
+        await reaction.message.clear_reactions()
+        await reaction.message.add_reaction("↩️")
+        await reaction.message.add_reaction("✅")
+
+        messageToTournamentIDMappings[reaction.message.id] = tournamentID
+
+    elif reaction.message.embeds[0].title == "Delete Tournament" and reaction.emoji == "✅":
+        tournamentID = messageToTournamentIDMappings[reaction.message.id]
+        resp = await util.deleteTournament(user.id, tournamentID, reaction.message.guild.id)
+        em = discord.Embed(title="Tournament Deleted", colour=65280)
+        await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
+
+        await asyncio.sleep(2)
+        em = await util.genOwnedPage(reaction.message.guild.id, user.id)
+        em = em[0]
 
     # Emoji was not part of a command, so return
     else:
@@ -181,7 +221,6 @@ async def on_reaction_add(reaction, user):
     await reaction.remove(user)
 
     em.colour = 255
-    em.set_footer(text=f"{page}/{maxPage}")
     await reaction.message.edit(embed=em, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
 

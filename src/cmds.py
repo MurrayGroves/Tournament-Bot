@@ -82,7 +82,10 @@ async def cmd_create(client, message, name, date, time, tz, limit):
 
     # Convert dictionary to json string
     tourney = json.dumps(tourney)
-    tourneyID = len(os.listdir(f"../data/servers/{message.guild.id}/"))
+
+    # Find available ID
+    tourneyList = sorted(os.listdir(f"../data/servers/{message.guild.id}/"))
+    tourneyID = int(tourneyList[-2].replace(".json", "")) + 1
 
     upcoming = {tourneyID: dTime}
     if "upcoming.json" not in os.listdir(f"../data/servers/{message.guild.id}/"):
@@ -117,7 +120,7 @@ async def cmd_create(client, message, name, date, time, tz, limit):
 
 
 async def cmd_owned(client, message):
-    em = await util.genOwnedPage(1, message.guild.id, message.author.id)
+    em = await util.genOwnedPage(message.guild.id, message.author.id)
     em = em[0]
     msg = await message.reply(embed=em, mention_author=False)
     await msg.add_reaction("⬅️")

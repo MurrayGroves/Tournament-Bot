@@ -79,7 +79,7 @@ async def genUpcomingPage(page, guildID):
     em.set_footer(text=footer)
     return (em, tournamentIDs)
 
-async def genOwnedPage(page, guildID, userID, **kwargs):
+async def genOwnedPage(guildID, userID, **kwargs):
     f = await aiofiles.open(f"../data/users/{userID}.json")
     userData = await f.read()
     await f.close()
@@ -97,6 +97,7 @@ async def genOwnedPage(page, guildID, userID, **kwargs):
     tableList = []
     i = 0
     tournamentIDs = []
+    page = 1
     for tID in owned:
         i += 1
 
@@ -138,7 +139,6 @@ async def genOwnedPage(page, guildID, userID, **kwargs):
     desc = "\n".join(desc)
 
     em = discord.Embed(title="Owned Tournaments", description=f"```{desc}```", colour=255)
-    em.set_footer(text=footer)
     return (em, tournamentIDs)
 
 # If user isn't registered, create a template user file
@@ -213,3 +213,45 @@ async def joinTournament(userID, tournamentID, guildID):
     await f.close()
 
     return 1, tournamentName
+
+async def deleteTournament(userID, tournamentID, guildID):
+    f = await aiofiles.open(f"../data/users/{userID}.json")
+    old = await f.read()
+    await f.close()
+
+    old = json.loads(old)
+    old["tOwned"].pop(old["tOwned"].index(f"{guildID}/{tournamentID}"))
+
+    f = await aiofiles.open(f"../data/users/{userID}.json", "w")
+    await f.write(json.dumps(old))
+    await f.close()\
+
+    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.json")
+    old = await f.read()
+    await f.close()
+
+    old = json.loads(old)
+    del old[tournamentID]
+
+    f = await aiofiles.open(f"../data/servers/{guildID}/upcoming.json", "w")
+    await f.write(json.dumps(old))
+    await f.close()
+
+    f = await aiofiles.open(f"../data/servers/{guildID}/{tournamentID}.json")
+    tournament = await f.read()
+    await f.close()
+
+    tournament = json.loads(tournament)
+    for user in tournament["players"]:
+        f = await aiofiles.open(f"../data/users/{user}.json")
+        old = await f.read()
+        await f.close()
+
+        old = json.loads(old)
+        old["tJoined"].pop(old["tJoined"].index(f"{guildID}/{tournamentID}"))
+
+        f = await aiofiles.open(f"../data/users/{user}.json", "w")
+        await f.write(json.dumps(old))
+        await f.close()
+
+    os.remove(f"../data/servers/{guildID}/{tournamentID}.json")
