@@ -2,14 +2,20 @@ import os
 import aiofiles
 import json
 import logging
-import datetime
+from datetime import datetime, timezone
 import discord
 import termtables
 import math
 import random
+import pytz
 
 # Add the command logger
 logger = logging.getLogger("cmdLogger")
+
+# Generate a dictionary of timezone abbreviations to full timezone names. E.g. "PST": "US/Pacific".
+# This is because pytz.timezone() only takes full timezone names but we want users to be able to input tz names such as PST
+timezoneLookup = dict([(pytz.timezone(x).localize(datetime.now()).tzname(), x) for x in pytz.all_timezones])
+
 
 prefix = "t:"
 
@@ -22,8 +28,8 @@ async def cleanUpcoming(guildID):
     upcoming = json.loads(upcoming)
     upcomingDup = upcoming.copy()
     for event in upcoming:
-        dTimeObj = datetime.datetime.strptime(upcoming[event], "%Y/%m/%d %H:%M")
-        if dTimeObj < datetime.datetime.now():
+        dTimeObj = datetime.strptime(upcoming[event], "%Y/%m/%d %H:%M")
+        if dTimeObj < datetime.now():
             upcomingDup.pop(event)
 
     upcoming = json.dumps(upcomingDup)
@@ -255,3 +261,72 @@ async def deleteTournament(userID, tournamentID, guildID):
         await f.close()
 
     os.remove(f"../data/servers/{guildID}/{tournamentID}.json")
+
+async def editTournament(message, name, date, time, tz, limit, tourneyID):
+    global timezoneLookup
+
+    dTime = date + time
+    try:
+        # Generate a timezone agnostic datetime object from the user's input
+        dTimeObj = datetime.strptime(dTime, "%Y/%m/%d%H:%M")
+        # Get a timezone object from the shortcode provided by the user
+        oldTZ = pytz.timezone(timezoneLookup[tz])
+        # Add a datetime to the timezone object
+        oldTZ = oldTZ.localize(dTimeObj)
+        # Convert the timezone/datetime object to a datetime object in UTC
+        dTimeObj = oldTZ.astimezone(timezone.utc)
+
+    except ValueError:
+        logger.debug("Invalid datetime")
+        em = discord.Embed(title="Error",
+                           description="Invalid date/time. Please make sure it's in this format: YYYY/MM/DD HH:MM TZ",
+                           colour=16711680)
+        await message.channel.send(embed=em)
+        return
+
+    except KeyError:
+        logger.debug("Invalid timezone")
+        em = discord.Embed(title="Error", description="Invalid timezone.", colour=16711680)
+        await message.channel.send(embed=em)
+        return
+
+    dTime = datetime.strftime(dTimeObj, "%Y/%m/%d %H:%M")
+
+    os.makedirs(f"../data/servers/{message.guild.id}/", exist_ok=True)
+
+    tourney = {"name": name, "dTime": dTime, "players": [], "limit": limit}
+
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/{tourneyID}.json")
+    old = await f.read()
+    await f.close()
+    old = json.loads(old)
+    tourney["players"] = old["players"]
+
+    em = discord.Embed(title="Tournament Edited", colour=65280)
+    em.add_field(name="Name", value=name, inline=False)
+    em.add_field(name="Date", value=dTime.split(" ")[0], inline=False)
+    em.add_field(name="Time", value=f"{dTime.split(' ')[1]} UTC", inline=False)
+
+    await message.channel.send(embed=em)
+
+    # Convert dictionary to json string
+    tourney = json.dumps(tourney)
+
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json")
+    oldData = await f.read()
+    await f.close()
+
+    upcoming = json.loads(oldData)
+    upcoming[tourneyID] = dTime
+
+    upcoming = json.dumps(upcoming)
+
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/upcoming.json", "w+")
+    await f.write(upcoming)
+    await f.close()
+
+    await cleanUpcoming(message.guild.id)
+
+    f = await aiofiles.open(f"../data/servers/{message.guild.id}/{tourneyID}.json", "w+")
+    await f.write(tourney)
+    await f.close()

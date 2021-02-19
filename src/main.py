@@ -30,6 +30,7 @@ prefix = "t:"
 client = discord.Client()
 
 messageToTournamentIDMappings = {}
+messageToUserIDMappings = {}
 
 @client.event
 async def on_ready():
@@ -47,6 +48,20 @@ async def on_message(message):
     # Prevents infinite loops caused by the bot triggering its own commands
     if message.author == client.user:
         return
+
+    if message.reference:
+        if message.reference.resolved.reference:
+            userID = messageToUserIDMappings[message.reference.resolved.id]
+            if message.author.id == userID and message.reference.resolved.embeds[0].title == "Owned Tournaments":
+                args = message.content.strip().split(" ")
+                desc = message.reference.resolved.embeds[0].description.splitlines()
+                selected = [s for s in desc if "*" in s]
+                selection = desc.index(selected[0]) - 2
+                tournaments = await util.genOwnedPage(message.guild.id, userID)
+                tournamentID = tournaments[1][selection]
+                args.append(tournamentID)
+                args.insert(0, message)
+                await util.editTournament(*args)
 
     # If message doesn't start with the prefix, stop processing
     if not message.content.strip().startswith(prefix):
@@ -89,6 +104,7 @@ async def on_message(message):
 @client.event
 async def on_reaction_add(reaction, user):
     userID = reaction.message.reference.resolved.author.id
+    messageToUserIDMappings[reaction.message.id] = userID
     if user.id != userID:
         return
 
@@ -99,7 +115,7 @@ async def on_reaction_add(reaction, user):
                 footerText[1], _ = footerText[1].split(" ", 1)
 
             page = int(footerText[0])
-            maxPage = int(footerText[1])
+            maxPage = int(footerText[1].split("\n")[0])
 
     except TypeError:
         pass
@@ -118,11 +134,9 @@ async def on_reaction_add(reaction, user):
 
         em = await util.genUpcomingPage(page, reaction.message.guild.id)
         em = em[0]
-        em.set_footer(text=f"{page}/{maxPage}")
+        em.set_footer(text=reaction.message.embeds[0].footer.text.replace(str(page-1), str(page), 1))
 
     elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji in ["➡️", "⬅️"]:
-        await util.cleanUpcoming(reaction.message.guild.id)
-
         if reaction.emoji == "➡️" and page < maxPage:
             page += 1
 
@@ -182,6 +196,10 @@ async def on_reaction_add(reaction, user):
 
         tournament = await util.genOwnedPage(reaction.message.guild.id, user.id)
         em = tournament[0]
+
+    elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji == "✏️":
+        em = reaction.message.embeds[0]
+        em.set_footer(text=em.footer.text + f" Please reply to this message with the new details in the same format as {prefix}create")
 
     elif reaction.message.embeds[0].title == "Owned Tournaments" and reaction.emoji == "❌":
         desc = reaction.message.embeds[0].description.splitlines()
